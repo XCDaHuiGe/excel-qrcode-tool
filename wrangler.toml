@@ -1,4 +1,8 @@
 name = "excel-qrcode-tool"
-compatibility_date = "2025-02-01"
+compatibility_date = "2026-06-16"
 
-pages_build_output_dir = "dist"
+[pages]
+build_output_dir = "dist"
+
+[build]
+command = "npm run build"
