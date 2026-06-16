@@ -7,11 +7,25 @@ export type ParsedWorkbook = {
   headers: string[];
   rows: SheetRow[];
   previewRows: SheetRow[];
+  blankRowCount: number;
+};
+
+export type MatrixParseResult = {
+  headers: string[];
+  rows: SheetRow[];
+  blankRowCount: number;
 };
 
 export async function parseWorkbook(file: File): Promise<ParsedWorkbook> {
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+  const workbook = XLSX.read(buffer, {
+    type: 'array',
+    cellDates: true,
+    bookVBA: false,
+    bookFiles: false,
+    bookProps: false,
+    bookSheets: false,
+  });
   const firstSheetName = workbook.SheetNames[0];
 
   if (!firstSheetName) {
@@ -23,28 +37,22 @@ export async function parseWorkbook(file: File): Promise<ParsedWorkbook> {
     header: 1,
     raw: false,
     defval: '',
+    blankrows: false,
   });
 
-  if (matrix.length < 2) {
+  const { headers, rows, blankRowCount } = matrixToRows(matrix);
+
+  if (headers.length === 0) {
     throw new Error('Excel 必须包含表头和至少一行数据');
   }
 
-  const headers = matrix[0].map((value, index) => {
-    const header = String(value ?? '').trim();
-    return header || `未命名列${index + 1}`;
-  });
-
-  if (headers.every((header) => !header || header.startsWith('未命名列'))) {
+  if (headers.every((header) => header.startsWith('未命名列'))) {
     throw new Error('未识别到有效表头');
   }
 
-  const rows = matrix.slice(1).map((values) => {
-    const row: SheetRow = {};
-    headers.forEach((header, index) => {
-      row[header] = values[index] ?? '';
-    });
-    return row;
-  });
+  if (rows.length === 0) {
+    throw new Error('Excel 必须包含表头和至少一行数据');
+  }
 
   return {
     fileName: file.name,
@@ -52,5 +60,41 @@ export async function parseWorkbook(file: File): Promise<ParsedWorkbook> {
     headers,
     rows,
     previewRows: rows.slice(0, 20),
+    blankRowCount,
   };
+}
+
+export function matrixToRows(matrix: unknown[][]): MatrixParseResult {
+  if (matrix.length < 2) {
+    return {
+      headers: [],
+      rows: [],
+      blankRowCount: 0,
+    };
+  }
+
+  const headers = matrix[0].map((value, index) => {
+    const header = String(value ?? '').trim();
+    return header || `未命名列${index + 1}`;
+  });
+
+  let blankRowCount = 0;
+  const rows = matrix.slice(1).flatMap((values) => {
+    if (isBlankRow(values)) {
+      blankRowCount += 1;
+      return [];
+    }
+
+    const row: SheetRow = {};
+    headers.forEach((header, index) => {
+      row[header] = values[index] ?? '';
+    });
+    return [row];
+  });
+
+  return { headers, rows, blankRowCount };
+}
+
+function isBlankRow(values: unknown[]): boolean {
+  return values.every((value) => String(value ?? '').trim() === '');
 }

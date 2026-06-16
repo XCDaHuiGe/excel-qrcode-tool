@@ -1,18 +1,25 @@
 import jsPDF from 'jspdf';
 import JSZip from 'jszip';
 import { buildPngFileNames } from './filenames';
+import type { ProgressHandler } from './performance';
+import { shouldYieldToBrowser, yieldToBrowser } from './performance';
 import type { MaterialRecord, PdfLayout } from './types';
 import { createLabelPngBlob, createLabelPngDataUrl, PNG_LABEL_OPTIONS } from './qr';
 
-export async function exportZip(records: MaterialRecord[]): Promise<Blob> {
+export async function exportZip(records: MaterialRecord[], onProgress?: ProgressHandler): Promise<Blob> {
   const zip = new JSZip();
   const names = buildPngFileNames(records);
 
   for (let index = 0; index < records.length; index += 1) {
+    if (shouldYieldToBrowser(index)) {
+      await yieldToBrowser();
+    }
     const blob = await createLabelPngBlob(records[index]);
     zip.file(names[index], blob);
+    onProgress?.({ completed: index + 1, total: records.length, phase: '生成 PNG' });
   }
 
+  onProgress?.({ completed: records.length, total: records.length, phase: '压缩 ZIP' });
   return zip.generateAsync({ type: 'blob' });
 }
 
@@ -20,6 +27,7 @@ export async function exportPdf(
   records: MaterialRecord[],
   layout: PdfLayout,
   showCutLines: boolean,
+  onProgress?: ProgressHandler,
 ): Promise<Blob> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const margin = 10;
@@ -27,6 +35,9 @@ export async function exportPdf(
   const labelRatio = PNG_LABEL_OPTIONS.width / PNG_LABEL_OPTIONS.height;
 
   for (let index = 0; index < records.length; index += 1) {
+    if (shouldYieldToBrowser(index)) {
+      await yieldToBrowser();
+    }
     if (index > 0 && index % layout.itemsPerPage === 0) {
       doc.addPage();
     }
@@ -53,8 +64,10 @@ export async function exportPdf(
     const labelY = y + (layout.cellHeightMm - drawHeight) / 2;
 
     doc.addImage(labelDataUrl, 'PNG', labelX, labelY, drawWidth, drawHeight);
+    onProgress?.({ completed: index + 1, total: records.length, phase: '生成 PDF' });
   }
 
+  onProgress?.({ completed: records.length, total: records.length, phase: '写入 PDF' });
   return doc.output('blob');
 }
 

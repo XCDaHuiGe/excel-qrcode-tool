@@ -344,6 +344,23 @@ button:disabled {
   font-size: 13px;
 }
 
+.info-banner {
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.info-banner.warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
 .field-card,
 .export-card,
 .table-card {
@@ -764,6 +781,28 @@ tbody tr:hover td {
   color: #b91c1c;
   border-color: #fecaca;
   background: #fef2f2;
+}
+
+.progress-line {
+  display: grid;
+  gap: 7px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.progress-line div {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.progress-line i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 0.2s ease;
 }
 
 .spin {

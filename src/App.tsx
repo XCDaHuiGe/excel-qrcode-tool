@@ -18,6 +18,7 @@ import { buildMaterialRecords, summarizeRecords } from './lib/records';
 import { createQrDataUrl } from './lib/qr';
 import { downloadBlob, exportPdf, exportZip } from './lib/exporters';
 import type { LayoutRisk, MaterialRecord } from './lib/types';
+import { getDatasetMode, type ExportProgress } from './lib/performance';
 
 type QrPreview = {
   key: string;
@@ -36,6 +37,7 @@ const SAMPLE_WORKBOOK: ParsedWorkbook = {
     { 物资编码: 'WZ-2026-001', 物资名称: '工业传感器备用件', 规格型号: 'S-220', 存放位置: 'A区-05架', 数量: 2 },
   ],
   previewRows: [],
+  blankRowCount: 1,
 };
 SAMPLE_WORKBOOK.previewRows = SAMPLE_WORKBOOK.rows;
 
@@ -50,6 +52,7 @@ function App() {
   const [status, setStatus] = useState('等待上传');
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState<'zip' | 'pdf' | ''>('');
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const [qrPreviews, setQrPreviews] = useState<QrPreview[]>([]);
   const [previewMode, setPreviewMode] = useState<'grid' | 'page'>('grid');
 
@@ -142,11 +145,13 @@ function App() {
       return;
     }
     setExporting('zip');
+    setExportProgress({ completed: 0, total: records.length, phase: '准备导出' });
     try {
-      const blob = await exportZip(records);
+      const blob = await exportZip(records, setExportProgress);
       downloadBlob(blob, '物资二维码PNG.zip');
     } finally {
       setExporting('');
+      setExportProgress(null);
     }
   }
 
@@ -155,11 +160,13 @@ function App() {
       return;
     }
     setExporting('pdf');
+    setExportProgress({ completed: 0, total: records.length, phase: '准备导出' });
     try {
-      const blob = await exportPdf(records, layout, showCutLines);
+      const blob = await exportPdf(records, layout, showCutLines, setExportProgress);
       downloadBlob(blob, '物资二维码A4排版.pdf');
     } finally {
       setExporting('');
+      setExportProgress(null);
     }
   }
 
@@ -167,6 +174,7 @@ function App() {
   const canExport = records.length > 0;
   const visibleRows = workbook?.previewRows ?? [];
   const fileStatus = workbook ? workbook.fileName : '未上传文件';
+  const datasetMode = getDatasetMode(workbook?.rows.length ?? 0);
 
   return (
     <main className="app-shell">
@@ -226,7 +234,7 @@ function App() {
             <strong>{workbook ? workbook.fileName : '拖拽 Excel 到这里'}</strong>
             <span>
               {workbook
-                ? `${formatFileSize(workbook.fileSize)} · 共 ${workbook.rows.length} 行 · ${workbook.headers.length} 列`
+                ? `${formatFileSize(workbook.fileSize)} · 数据 ${workbook.rows.length} 行 · ${workbook.headers.length} 列`
                 : '支持 .xlsx / .xls / .csv，Excel 必须包含表头'}
             </span>
             <button className="primary-button" type="button">
@@ -240,6 +248,13 @@ function App() {
           </button>
 
           {error && <div className="error-banner">{error}</div>}
+          {workbook && (
+            <div className={`info-banner ${datasetMode === 'large' ? 'warning' : ''}`}>
+              {datasetMode === 'large'
+                ? `已进入大数据量模式：仅预览前 20 行和前 12 个二维码，导出时会分批生成并显示进度。`
+                : `已过滤 ${workbook.blankRowCount} 个整行空白行，Excel 图片不会参与二维码数据生成。`}
+            </div>
+          )}
 
           <div className="field-card">
             <h3>字段映射</h3>
@@ -354,6 +369,7 @@ function App() {
               {exporting === 'zip' ? <Loader2 className="spin" size={16} /> : <Download size={16} />}
               {exporting === 'zip' ? '生成中...' : `下载 ZIP（${records.length} 张）`}
             </button>
+            {exporting === 'zip' && exportProgress && <ProgressLine progress={exportProgress} />}
           </div>
 
           <div className="export-card">
@@ -427,10 +443,25 @@ function App() {
               {exporting === 'pdf' ? <Loader2 className="spin" size={16} /> : <Download size={16} />}
               {exporting === 'pdf' ? '生成 PDF 中...' : '下载 PDF'}
             </button>
+            {exporting === 'pdf' && exportProgress && <ProgressLine progress={exportProgress} />}
           </div>
         </aside>
       </section>
     </main>
+  );
+}
+
+function ProgressLine({ progress }: { progress: ExportProgress }) {
+  const percent = progress.total === 0 ? 0 : Math.round((progress.completed / progress.total) * 100);
+  return (
+    <div className="progress-line">
+      <span>
+        {progress.phase}：{progress.completed} / {progress.total}
+      </span>
+      <div>
+        <i style={{ width: `${percent}%` }} />
+      </div>
+    </div>
   );
 }
 
